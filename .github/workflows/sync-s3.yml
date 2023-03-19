@@ -1,0 +1,35 @@
+name: Add File to Buckets
+on: push
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@master
+
+      # Upload first file to first bucket
+      - name: Upload file 1 to bucket 1
+        uses: zdurham/s3-upload-github-action@master
+        with:
+          args: --acl public-read
+        env:
+          FILE: ./reddit/
+          AWS_REGION: 'us-east-1'
+          S3_BUCKET: bda-project-etl-scripts
+          S3_KEY: ${{ reddit/ }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      # Upload second file to second bucket
+      - name: Upload file 2 to bucket 2
+        uses: zdurham/s3-upload-github-action@master
+        with:
+          args: --acl public-read
+        env:
+          FILE: ./twitter/
+          AWS_REGION: 'us-east-1'
+          S3_BUCKET: bda-project-etl-scripts
+          S3_KEY: ${{ twitter/ }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
