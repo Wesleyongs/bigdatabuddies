@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+env:
+  bucket-name: bda-project-etl-scripts
 
 jobs:
   sync:
@@ -19,7 +21,7 @@ jobs:
           aws-region: us-east-1
 
       - name: Sync reddit folder to S3 bucket
-        run: aws s3 sync reddit s3://bucket-name/reddit
+        run: aws s3 sync reddit s3://${{ bucket-name }}/reddit
 
       - name: Sync twitter folder to S3 bucket
-        run: aws s3 sync twitter s3://bucket-name/twitter
+        run: aws s3 sync twitter s3://${{ bucket-name }}/twitter
