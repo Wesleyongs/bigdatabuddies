@@ -18,5 +18,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Sync files to S3 bucket
-        run: aws s3 sync . s3://bda-project-etl-scripts --delete
+      - name: Sync reddit folder to S3 bucket
+        run: aws s3 sync reddit s3://bucket-name/reddit
+
+      - name: Sync twitter folder to S3 bucket
+        run: aws s3 sync twitter s3://bucket-name/twitter
