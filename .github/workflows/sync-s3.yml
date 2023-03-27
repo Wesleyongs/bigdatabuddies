@@ -25,3 +25,6 @@ jobs:
 
       - name: Sync twitter folder to S3 bucket
         run: aws s3 sync twitter s3://${{ env.bucket-name }}/twitter
+
+        - name: Sync dag folder to S3 bucket
+        run: aws s3 sync twitter s3://${{ env.bucket-name }}/dags
