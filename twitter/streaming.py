@@ -140,10 +140,17 @@ class MyStream(tweepy.StreamingClient):
 
         score = {key: str(value) for key, value in score.items()}
 
+        print(score)
+
 
         compound_score = score['compound']
+        positive = score['pos']
+        negative = score['neg']
+        neutral = score['neu']
 
         print(compound_score)
+        print(positive)
+        print(negative)
         try:
             # Connect to MongoDB
             client = pymongo.MongoClient(f"mongodb+srv://{username}:{password}@{cluster_name}.igmsvhv.mongodb.net/{database_name}?retryWrites=true&w=majority")
@@ -170,12 +177,31 @@ class MyStream(tweepy.StreamingClient):
             sentiment_data = day_doc['sentiment_data']
             # sentiment_data[current_minute] = compound_score
 
+            # Handle totals
             if current_minute not in sentiment_data:
-                sentiment_data[current_minute] = {'compound': float(compound_score), 'count': 1, 'total': float(compound_score)}
+                sentiment_data[current_minute] = {'compound': float(compound_score), 'pos': float(positive), 'neg': float(negative), 'neu': float(neutral),  'total_count': 1, 'positive_count': 0,  'negative_count': 0, 'neutral_count': 0, 'total': float(compound_score), 'positive_total': float(positive), 'negative_total': float(negative), 'neutral_total': float(neutral)}
             else:
-                sentiment_data[current_minute]['count'] += 1
+                sentiment_data[current_minute]['total_count'] += 1
                 sentiment_data[current_minute]['total'] += float(compound_score)
-                sentiment_data[current_minute]['compound'] = sentiment_data[current_minute]['total'] / sentiment_data[current_minute]['count']
+                sentiment_data[current_minute]['positive_total'] += float(positive)
+                sentiment_data[current_minute]['negative_total'] -= float(negative)
+                sentiment_data[current_minute]['compound'] = sentiment_data[current_minute]['total'] / sentiment_data[current_minute]['total_count']
+            
+
+            # Handle Positive
+            if float(positive) > 0:
+                sentiment_data[current_minute]['positive_count'] += 1
+                sentiment_data[current_minute]['pos'] = sentiment_data[current_minute]['positive_total'] / sentiment_data[current_minute]['positive_count']
+
+            # Handle Negative
+            if float(negative) > 0:
+                sentiment_data[current_minute]['negative_count'] += 1
+                sentiment_data[current_minute]['neg'] = sentiment_data[current_minute]['negative_total'] / sentiment_data[current_minute]['negative_count']
+            
+            # Handle Neutral
+            if float(neutral) > 0:
+                sentiment_data[current_minute]['neutral_count'] += 1
+                sentiment_data[current_minute]['neu'] = sentiment_data[current_minute]['neutral_total'] / sentiment_data[current_minute]['neutral_count']
 
 
             result = collection.update_one({'_id': current_day}, {'$set': {'sentiment_data': sentiment_data}})
