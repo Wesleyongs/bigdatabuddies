@@ -1,14 +1,20 @@
 import tweepy
 import os
-import json
+import pytz
 import re
-import requests
 #For Preprocessing
 import re    # RegEx for removing non-letter characters
 
 import nltk
 from nltk.corpus import wordnet
 from nltk.corpus import stopwords
+
+import os
+from datetime import datetime
+import pymongo
+import json
+
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 
 # Download NLTK data
@@ -18,6 +24,24 @@ nltk.download('wordnet')
 nltk.download('stopwords')
 nltk.download('omw-1.4')
 nltk.download('vader_lexicon')
+
+# Lexicon setup
+# New words and values
+new_words = {
+    'easy-to-use': 10,
+    'productive': 5,
+    'slow': -5,
+    'frustrating': -10,
+    'glitchy': -100,
+}
+
+# Instantiate the sentiment intensity analyzer with the existing lexicon
+vader = SentimentIntensityAnalyzer()
+# Update the lexicon
+vader.lexicon.update(new_words)
+
+# Set timezone to GMT+8
+tz = pytz.timezone('Asia/Manila')
 
 import html
 
@@ -93,6 +117,11 @@ def clean_original_text(text):
     return clean_text
 
 
+username = os.getenv("USERNAME")
+password = os.getenv("PASSWORD")
+cluster_name = os.getenv("CLUSTER_NAME")
+database_name = os.getenv("DATABASE_NAME")
+
 # Create a class that inherits from the tweepy.StreamListener
 class MyStream(tweepy.StreamingClient):
     # This function gets called when the stream is working
@@ -106,20 +135,83 @@ class MyStream(tweepy.StreamingClient):
         # Clean the text
         clean_str = clean_original_text(text)
 
-        # Pre processed text
-        pre_processed_text = {
-            'text': clean_str
-        }
+        # Get sentiment
+        score = vader.polarity_scores(clean_str)
 
-        print(pre_processed_text)
+        score = {key: str(value) for key, value in score.items()}
 
-        headers = {
-            'Content-Type': 'application/json'
-        }
-        payload = json.dumps(pre_processed_text)
+        print(score)
 
-        r = requests.post(url=os.getenv('LAMBDA_URL'), headers=headers, data=payload)
-        print(r)
+
+        compound_score = score['compound']
+        positive = score['pos']
+        negative = score['neg']
+        neutral = score['neu']
+
+        print(compound_score)
+        print(positive)
+        print(negative)
+        try:
+            # Connect to MongoDB
+            client = pymongo.MongoClient(f"mongodb+srv://{username}:{password}@{cluster_name}.igmsvhv.mongodb.net/{database_name}?retryWrites=true&w=majority")
+            
+            # Get the database
+            db = client[database_name]
+            
+            # Get the collection
+            collection = db["real-time"]
+
+            # Get current minute of the day
+            current_minute = datetime.now(tz).strftime('%Y-%m-%d %H:%M')
+
+            # Check if current day exists in database
+            current_day = datetime.now(tz).strftime('%Y-%m-%d')
+            day_doc = collection.find_one({'_id': current_day})
+
+            if not day_doc:
+                # Create empty document for the day
+                day_doc = {'_id': current_day, 'sentiment_data': {}}
+                collection.insert_one(day_doc)
+
+            # Update sentiment for current minute of the day
+            sentiment_data = day_doc['sentiment_data']
+            # sentiment_data[current_minute] = compound_score
+
+            # Handle totals
+            if current_minute not in sentiment_data:
+                sentiment_data[current_minute] = {'compound': float(compound_score), 'pos': float(positive), 'neg': float(negative), 'neu': float(neutral),  'total_count': 1, 'positive_count': 0,  'negative_count': 0, 'neutral_count': 0, 'total': float(compound_score), 'positive_total': float(positive), 'negative_total': float(negative), 'neutral_total': float(neutral)}
+            else:
+                sentiment_data[current_minute]['total_count'] += 1
+                sentiment_data[current_minute]['total'] += float(compound_score)
+                sentiment_data[current_minute]['positive_total'] += float(positive)
+                sentiment_data[current_minute]['negative_total'] -= float(negative)
+                sentiment_data[current_minute]['compound'] = sentiment_data[current_minute]['total'] / sentiment_data[current_minute]['total_count']
+            
+
+            # Handle Positive
+            if float(positive) > 0:
+                sentiment_data[current_minute]['positive_count'] += 1
+                sentiment_data[current_minute]['pos'] = sentiment_data[current_minute]['positive_total'] / sentiment_data[current_minute]['positive_count']
+
+            # Handle Negative
+            if float(negative) > 0:
+                sentiment_data[current_minute]['negative_count'] += 1
+                sentiment_data[current_minute]['neg'] = sentiment_data[current_minute]['negative_total'] / sentiment_data[current_minute]['negative_count']
+            
+            # Handle Neutral
+            if float(neutral) > 0:
+                sentiment_data[current_minute]['neutral_count'] += 1
+                sentiment_data[current_minute]['neu'] = sentiment_data[current_minute]['neutral_total'] / sentiment_data[current_minute]['neutral_count']
+
+
+            result = collection.update_one({'_id': current_day}, {'$set': {'sentiment_data': sentiment_data}})
+            print(result)
+
+
+            # Close the connection
+            client.close()
+        except Exception as e:
+            print(f"Error: {e}")
         return
 
 
